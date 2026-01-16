@@ -1,0 +1,125 @@
+{
+  "training_data": [
+    {
+      "message_length": 45,
+      "level": "INFO",
+      "service": "api-gateway",
+      "has_exception": false,
+      "has_timeout": false,
+      "has_connection_error": false
+    },
+    {
+      "message_length": 52,
+      "level": "INFO",
+      "service": "log-ingestion",
+      "has_exception": false,
+      "has_timeout": false,
+      "has_connection_error": false
+    },
+    {
+      "message_length": 38,
+      "level": "DEBUG",
+      "service": "log-processor",
+      "has_exception": false,
+      "has_timeout": false,
+      "has_connection_error": false
+    },
+    {
+      "message_length": 67,
+      "level": "INFO",
+      "service": "api-gateway",
+      "has_exception": false,
+      "has_timeout": false,
+      "has_connection_error": false
+    },
+    {
+      "message_length": 89,
+      "level": "WARN",
+      "service": "log-processor",
+      "has_exception": false,
+      "has_timeout": false,
+      "has_connection_error": false
+    },
+    {
+      "message_length": 156,
+      "level": "ERROR",
+      "service": "api-gateway",
+      "has_exception": true,
+      "has_timeout": false,
+      "has_connection_error": false
+    },
+    {
+      "message_length": 234,
+      "level": "ERROR",
+      "service": "log-ingestion",
+      "has_exception": true,
+      "has_timeout": false,
+      "has_connection_error": true
+    },
+    {
+      "message_length": 178,
+      "level": "ERROR",
+      "service": "log-processor",
+      "has_exception": true,
+      "has_timeout": true,
+      "has_connection_error": false
+    },
+    {
+      "message_length": 42,
+      "level": "INFO",
+      "service": "ml-service",
+      "has_exception": false,
+      "has_timeout": false,
+      "has_connection_error": false
+    },
+    {
+      "message_length": 55,
+      "level": "INFO",
+      "service": "api-gateway",
+      "has_exception": false,
+      "has_timeout": false,
+      "has_connection_error": false
+    },
+    {
+      "message_length": 48,
+      "level": "DEBUG",
+      "service": "log-ingestion",
+      "has_exception": false,
+      "has_timeout": false,
+      "has_connection_error": false
+    },
+    {
+      "message_length": 61,
+      "level": "INFO",
+      "service": "log-processor",
+      "has_exception": false,
+      "has_timeout": false,
+      "has_connection_error": false
+    },
+    {
+      "message_length": 73,
+      "level": "WARN",
+      "service": "api-gateway",
+      "has_exception": false,
+      "has_timeout": false,
+      "has_connection_error": false
+    },
+    {
+      "message_length": 198,
+      "level": "ERROR",
+      "service": "ml-service",
+      "has_exception": true,
+      "has_timeout": false,
+      "has_connection_error": false
+    },
+    {
+      "message_length": 267,
+      "level": "FATAL",
+      "service": "log-processor",
+      "has_exception": true,
+      "has_timeout": true,
+      "has_connection_error": true
+    }
+  ],
+  "contamination": 0.15
+}

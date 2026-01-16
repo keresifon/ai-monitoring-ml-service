@@ -1,0 +1,57 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/OWNER/ai-monitoring-ml-service
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+service:
+  type: ClusterIP
+  port: 8000
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 200m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+env:
+  MODEL_PATH: /app/models
+  LOG_LEVEL: INFO
+
+persistence:
+  enabled: true
+  storageClass: standard
+  size: 5Gi
+  accessMode: ReadWriteOnce
+
+livenessProbe:
+  httpGet:
+    path: /api/v1/health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /api/v1/health
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 5
