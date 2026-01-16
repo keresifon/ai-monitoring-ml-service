@@ -4,13 +4,44 @@ Integration tests for ML Service API endpoints
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import Mock
-from main import app
+from fastapi import FastAPI
 from app.services.model_service import ModelService
+from app.api import health, anomaly
+
+
+# Create a test app without lifespan to avoid loading models from disk
+@pytest.fixture(scope="module")
+def test_app():
+    """Create a test FastAPI app without lifespan"""
+    from datetime import datetime
+    
+    test_app = FastAPI(
+        title="AI Log Monitoring - ML Service (Test)",
+        description="Machine Learning service for log anomaly detection - Test",
+        version="1.0.0"
+    )
+    
+    # Include routers
+    test_app.include_router(health.router, prefix="/api/v1", tags=["Health"])
+    test_app.include_router(anomaly.router, prefix="/api/v1", tags=["Anomaly Detection"])
+    
+    # Add root endpoint
+    @test_app.get("/")
+    async def root():
+        """Root endpoint"""
+        return {
+            "service": "AI Log Monitoring - ML Service",
+            "version": "1.0.0",
+            "status": "running",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    
+    return test_app
 
 
 # Create a mock model service for testing
 @pytest.fixture(scope="module")
-def test_client():
+def test_client(test_app):
     """Create test client with mocked model service"""
     # Create a mock model service
     mock_model_service = Mock(spec=ModelService)
@@ -19,11 +50,11 @@ def test_client():
     mock_model_service.trained_at = "2024-01-01T00:00:00"
     mock_model_service.contamination = 0.1
     
-    # Set it in app state
-    app.state.model_service = mock_model_service
+    # Set it in app state before creating client
+    test_app.state.model_service = mock_model_service
     
     # Create test client
-    with TestClient(app) as client:
+    with TestClient(test_app) as client:
         yield client
 
 
