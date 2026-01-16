@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 import logging
 
@@ -103,7 +103,7 @@ class ModelService:
         
         # Initialize and fit scaler
         self.scaler = StandardScaler()
-        X_scaled = self.scaler.fit_transform(X)
+        x_scaled = self.scaler.fit_transform(X)
         
         # Train Isolation Forest
         self.contamination = contamination
@@ -115,11 +115,11 @@ class ModelService:
             n_jobs=-1
         )
         
-        self.model.fit(X_scaled)
+        self.model.fit(x_scaled)
         
         # Update metadata
-        self.trained_at = datetime.utcnow().isoformat()
-        self.model_version = f"1.0.{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+        self.trained_at = datetime.now(timezone.utc).isoformat()
+        self.model_version = f"1.0.{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
         
         logger.info(f"Model trained successfully: version {self.model_version}")
     

@@ -3,7 +3,8 @@ replicaCount: 2
 image:
   repository: ghcr.io/OWNER/ai-monitoring-ml-service
   pullPolicy: IfNotPresent
-  tag: "latest"
+  # Defaults to Chart.AppVersion (1.0.0) if not specified - override with specific version tag
+  tag: "1.0.0"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -22,9 +23,11 @@ resources:
   limits:
     cpu: 2000m
     memory: 2Gi
+    ephemeral-storage: 10Gi
   requests:
     cpu: 200m
     memory: 512Mi
+    ephemeral-storage: 1Gi
 
 autoscaling:
   enabled: false

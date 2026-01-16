@@ -4,7 +4,7 @@ Anomaly detection endpoints
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 
 logger = logging.getLogger(__name__)
@@ -91,7 +91,7 @@ async def predict_anomaly(
             is_anomaly=result["is_anomaly"],
             anomaly_score=result["anomaly_score"],
             confidence=result["confidence"],
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             model_version=model_service.model_version
         )
         
@@ -136,7 +136,7 @@ async def predict_anomaly_batch(
                     is_anomaly=result["is_anomaly"],
                     anomaly_score=result["anomaly_score"],
                     confidence=result["confidence"],
-                    timestamp=datetime.utcnow().isoformat(),
+                    timestamp=datetime.now(timezone.utc).isoformat(),
                     model_version=model_service.model_version
                 )
             )

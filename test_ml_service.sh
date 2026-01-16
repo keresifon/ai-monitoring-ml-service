@@ -4,10 +4,12 @@
 # Make sure the service is running: uvicorn main:app --reload
 
 BASE_URL="http://localhost:8000"
+CONTENT_TYPE="Content-Type: application/json"
+SEPARATOR="========================================="
 
-echo "========================================="
+echo "$SEPARATOR"
 echo "Testing ML Service"
-echo "========================================="
+echo "$SEPARATOR"
 echo ""
 
 # Test 1: Health Check
@@ -31,7 +33,7 @@ echo ""
 # Test 4: Train Model
 echo "4. Training Model with sample data..."
 curl -s -X POST "$BASE_URL/api/v1/train" \
-  -H "Content-Type: application/json" \
+  -H "$CONTENT_TYPE" \
   -d @sample_training_data.json | jq '.'
 echo ""
 echo ""
@@ -45,7 +47,7 @@ echo ""
 # Test 6: Predict Normal Log
 echo "6. Testing Prediction - Normal Log..."
 curl -s -X POST "$BASE_URL/api/v1/predict" \
-  -H "Content-Type: application/json" \
+  -H "$CONTENT_TYPE" \
   -d '{
     "log_id": "test-log-001",
     "features": {
@@ -63,7 +65,7 @@ echo ""
 # Test 7: Predict Anomalous Log
 echo "7. Testing Prediction - Anomalous Log..."
 curl -s -X POST "$BASE_URL/api/v1/predict" \
-  -H "Content-Type: application/json" \
+  -H "$CONTENT_TYPE" \
   -d '{
     "log_id": "test-log-002",
     "features": {
@@ -81,7 +83,7 @@ echo ""
 # Test 8: Batch Prediction
 echo "8. Testing Batch Prediction..."
 curl -s -X POST "$BASE_URL/api/v1/predict/batch" \
-  -H "Content-Type: application/json" \
+  -H "$CONTENT_TYPE" \
   -d '[
     {
       "log_id": "batch-001",
@@ -109,8 +111,8 @@ curl -s -X POST "$BASE_URL/api/v1/predict/batch" \
 echo ""
 echo ""
 
-echo "========================================="
+echo "$SEPARATOR"
 echo "All tests completed!"
-echo "========================================="
+echo "$SEPARATOR"
 
 # Made with Bob

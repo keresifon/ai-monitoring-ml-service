@@ -17,6 +17,7 @@ spec:
         {{- include "ml-service.selectorLabels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "ml-service.serviceAccountName" . }}
+      automountServiceAccountToken: false
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"

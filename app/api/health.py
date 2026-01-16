@@ -2,7 +2,7 @@
 Health check endpoints
 """
 from fastapi import APIRouter, Request
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any
 
 router = APIRouter()
@@ -32,7 +32,7 @@ async def health_check(request: Request) -> Dict[str, Any]:
     return {
         "status": "UP",
         "service": "ml-service",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "model": {
             "status": model_status,
             "info": model_info
@@ -54,7 +54,7 @@ async def readiness_check(request: Request) -> Dict[str, Any]:
     
     return {
         "ready": is_ready,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
 # Made with Bob
