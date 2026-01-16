@@ -30,6 +30,7 @@ COPY --from=builder /root/.local /root/.local
 ENV PATH=/root/.local/bin:$PATH
 
 # Copy application code
+# .dockerignore ensures sensitive files are excluded
 COPY . .
 
 # Create models directory

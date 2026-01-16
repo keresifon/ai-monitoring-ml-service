@@ -1,0 +1,99 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Environment and secrets
+.env
+.env.*
+*.env
+*.key
+*.pem
+*.p12
+*.jks
+secrets/
+credentials/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+.project
+.classpath
+.settings/
+
+# Testing
+tests/
+test_*.py
+*_test.py
+.pytest_cache/
+.coverage
+coverage/
+*.lcov
+
+# Documentation
+README.md
+CONTRIBUTING.md
+*.md
+docs/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+
+# Build artifacts
+target/
+*.jar
+*.war
+*.ear
+
+# Models (will be created at runtime or mounted)
+models/*.pkl
+models/*.joblib
+
+# Sample data (not needed in production)
+sample_*.json
+test_*.sh
+
+# Charts (not needed in container)
+charts/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
