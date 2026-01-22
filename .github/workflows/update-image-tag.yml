@@ -64,6 +64,7 @@ jobs:
         if: github.event_name == 'workflow_run'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
           echo "workflow_run_id=${{ github.event.workflow_run.id }}" >> $GITHUB_OUTPUT
           echo "workflow_run_conclusion=${{ github.event.workflow_run.conclusion }}" >> $GITHUB_OUTPUT
@@ -99,7 +100,7 @@ jobs:
           
           # If still empty, check the workflow_run event directly (might not work for tags)
           if [ -z "$HEAD_REF" ] || [ "$HEAD_REF" = "null" ]; then
-            HEAD_REF="${{ github.event.workflow_run.head_branch }}"
+            HEAD_REF="$WORKFLOW_RUN_HEAD_BRANCH"
           fi
           
           # Only try to extract tag if HEAD_REF looks like a tag reference
