@@ -1,0 +1,287 @@
+name: Update Image Tag
+
+on:
+  # Primary trigger: After CI/CD workflow completes (when image is built and pushed)
+  # This triggers when CI/CD runs on tags (v*) and completes successfully
+  workflow_run:
+    workflows: ["CI/CD"]
+    types:
+      - completed
+  # Trigger from docker-build job when image is pushed (preferred method - most reliable)
+  repository_dispatch:
+    types: [image-pushed, new-tag]
+  # Allow manual triggering with optional tag input
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Specific tag to use (leave empty to use latest)'
+        required: false
+        type: string
+
+jobs:
+  update-image-tag:
+    # Only run if:
+    # 1. workflow_run completed successfully (will check if it was a tag in the step)
+    # 2. repository_dispatch (from docker-build job after image is pushed - PRIMARY METHOD)
+    # 3. workflow_dispatch (manual trigger)
+    if: |
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      github.event_name == 'repository_dispatch' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          # For workflow_run or repository_dispatch, checkout develop branch (where we want to update values.yaml)
+          # For manual dispatch, use the default branch
+          ref: ${{ (github.event_name == 'workflow_run' || github.event_name == 'repository_dispatch') && 'develop' || github.ref }}
+      
+      - name: Show checkout info
+        run: |
+          echo "Current branch: $(git branch --show-current)"
+          echo "Current ref: $(git rev-parse --abbrev-ref HEAD)"
+          echo "Event name: ${{ github.event_name }}"
+          echo "Git ref: ${{ github.ref }}"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyyaml requests
+
+      - name: Get workflow run context
+        id: workflow-context
+        if: github.event_name == 'workflow_run'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "workflow_run_id=${{ github.event.workflow_run.id }}" >> $GITHUB_OUTPUT
+          echo "workflow_run_conclusion=${{ github.event.workflow_run.conclusion }}" >> $GITHUB_OUTPUT
+          
+          # Get workflow run details to extract the ref/tag
+          WORKFLOW_RUN_JSON=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}")
+          
+          # Check the event type - if it's not a push to a tag, skip tag extraction
+          EVENT=$(echo "$WORKFLOW_RUN_JSON" | grep -o '"event":"[^"]*"' | cut -d'"' -f4 || echo "")
+          echo "Workflow run event: $EVENT"
+          
+          # Try to extract head_ref first (for tags) - this is the actual ref that triggered the workflow
+          HEAD_REF=$(echo "$WORKFLOW_RUN_JSON" | grep -o '"head_ref":"[^"]*"' | cut -d'"' -f4 || echo "")
+          
+          # If head_ref is empty and event is push, try to get it from the workflow run's head_branch
+          # For tag pushes, head_branch is usually null, so we check head_ref
+          if [ -z "$HEAD_REF" ] && [ "$EVENT" = "push" ]; then
+            # For tag pushes, head_branch might be null, so check if there's a tag in the workflow run
+            # We can check the workflow run's display_title or look for tag patterns
+            HEAD_BRANCH=$(echo "$WORKFLOW_RUN_JSON" | grep -o '"head_branch":"[^"]*"' | cut -d'"' -f4 || echo "")
+            if [ -z "$HEAD_BRANCH" ] || [ "$HEAD_BRANCH" = "null" ]; then
+              # head_branch is null for tag pushes, try to extract from display_title or path
+              DISPLAY_TITLE=$(echo "$WORKFLOW_RUN_JSON" | grep -o '"display_title":"[^"]*"' | cut -d'"' -f4 || echo "")
+              if [[ "$DISPLAY_TITLE" =~ v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+                HEAD_REF="refs/tags/v${BASH_REMATCH[1]}"
+                echo "Extracted tag from display_title: $HEAD_REF"
+              fi
+            else
+              HEAD_REF="$HEAD_BRANCH"
+            fi
+          fi
+          
+          # If still empty, check the workflow_run event directly (might not work for tags)
+          if [ -z "$HEAD_REF" ] || [ "$HEAD_REF" = "null" ]; then
+            HEAD_REF="${{ github.event.workflow_run.head_branch }}"
+          fi
+          
+          # Only try to extract tag if HEAD_REF looks like a tag reference
+          if [[ "$HEAD_REF" =~ ^refs/tags/v(.+)$ ]]; then
+            TAG="${BASH_REMATCH[1]}"
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
+            echo "Extracted tag: $TAG from $HEAD_REF"
+          elif [[ "$HEAD_REF" =~ ^refs/tags/(.+)$ ]]; then
+            TAG="${BASH_REMATCH[1]}"
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
+            echo "Extracted tag: $TAG from $HEAD_REF"
+          elif [[ "$HEAD_REF" =~ ^v(.+)$ ]]; then
+            TAG="${BASH_REMATCH[1]}"
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
+            echo "Extracted tag: $TAG from $HEAD_REF"
+          else
+            # HEAD_REF is a branch (like "develop") or not a tag - don't extract tag
+            echo "HEAD_REF is not a tag: $HEAD_REF (likely a branch or null)"
+            echo "Tag extraction skipped - will rely on repository_dispatch or registry lookup"
+          fi
+
+      - name: Determine tag to use
+        id: determine-tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MANUAL_TAG: ${{ inputs.tag }}
+          DISPATCH_TAG: ${{ github.event.client_payload.tag }}
+          WORKFLOW_RUN_TAG: ${{ steps.workflow-context.outputs.tag }}
+        run: |
+          echo "=== Determining tag to use ==="
+          echo "Event name: ${{ github.event_name }}"
+          echo "Manual tag: $MANUAL_TAG"
+          echo "Dispatch tag: $DISPATCH_TAG"
+          echo "Workflow run tag: $WORKFLOW_RUN_TAG"
+          
+          # Priority: manual input > dispatch tag (from docker-build) > workflow_run tag > latest from registry
+          if [ -n "$MANUAL_TAG" ]; then
+            echo "Using manual tag: $MANUAL_TAG"
+            echo "tag=$MANUAL_TAG" >> $GITHUB_OUTPUT
+            echo "source=manual" >> $GITHUB_OUTPUT
+          elif [ -n "$DISPATCH_TAG" ]; then
+            echo "Using dispatch tag: $DISPATCH_TAG"
+            echo "tag=$DISPATCH_TAG" >> $GITHUB_OUTPUT
+            echo "source=dispatch" >> $GITHUB_OUTPUT
+          elif [ -n "$WORKFLOW_RUN_TAG" ]; then
+            echo "Using workflow_run tag: $WORKFLOW_RUN_TAG"
+            echo "tag=$WORKFLOW_RUN_TAG" >> $GITHUB_OUTPUT
+            echo "source=workflow_run" >> $GITHUB_OUTPUT
+          else
+            # For workflow_run or manual trigger without tag, get latest from registry
+            # This should rarely happen as repository_dispatch should provide the tag
+            echo "Warning: No tag found in event, fetching latest from registry" >&2
+            LATEST_TAG=$(python scripts/update-image-tag.py --get-latest)
+            if [ -n "$LATEST_TAG" ]; then
+              echo "Using registry latest tag: $LATEST_TAG"
+              echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+              echo "source=registry" >> $GITHUB_OUTPUT
+            else
+              echo "Error: Could not determine tag to use" >&2
+              exit 1
+            fi
+          fi
+          
+          echo "Selected tag: ${{ steps.determine-tag.outputs.tag }}"
+          echo "Source: ${{ steps.determine-tag.outputs.source }}"
+
+      - name: Verify workflow run was triggered by tag
+        if: github.event_name == 'workflow_run'
+        id: verify-tag
+        run: |
+          # Check if the workflow run was triggered by a tag (v*)
+          # If we couldn't extract a tag, this might not be a tag-triggered run
+          # Note: repository_dispatch is the primary method, so workflow_run is just a fallback
+          if [ -z "${{ steps.workflow-context.outputs.tag }}" ]; then
+            echo "Workflow run was not triggered by a tag (v*) or tag extraction failed."
+            echo "This is OK - repository_dispatch should have triggered with the tag."
+            echo "Will skip workflow_run tag extraction and rely on repository_dispatch or registry lookup."
+            echo "is_tag=false" >> $GITHUB_OUTPUT
+          else
+            echo "Workflow run was triggered by tag: ${{ steps.workflow-context.outputs.tag }}"
+            echo "is_tag=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get current tag from values.yaml
+        id: current-tag
+        run: |
+          CURRENT_TAG=$(python -c "import yaml; f=open('charts/values.yaml'); d=yaml.safe_load(f); print(d.get('image', {}).get('tag', 'latest'))")
+          echo "tag=$CURRENT_TAG" >> $GITHUB_OUTPUT
+
+      - name: Check if update is needed
+        id: check-update
+        run: |
+          # Skip if workflow_run but not triggered by tag
+          if [ "${{ github.event_name }}" = "workflow_run" ] && [ "${{ steps.verify-tag.outputs.is_tag }}" != "true" ]; then
+            echo "needed=false" >> $GITHUB_OUTPUT
+            echo "Skipping: Workflow run was not triggered by a tag"
+            exit 0
+          fi
+          
+          if [ "${{ steps.determine-tag.outputs.tag }}" = "${{ steps.current-tag.outputs.tag }}" ]; then
+            echo "needed=false" >> $GITHUB_OUTPUT
+            echo "Tags are already in sync (${{ steps.current-tag.outputs.tag }})"
+          else
+            echo "needed=true" >> $GITHUB_OUTPUT
+            echo "Update needed: ${{ steps.current-tag.outputs.tag }} -> ${{ steps.determine-tag.outputs.tag }}"
+          fi
+
+      - name: Update values.yaml
+        if: steps.check-update.outputs.needed == 'true'
+        env:
+          NEW_TAG: ${{ steps.determine-tag.outputs.tag }}
+        run: |
+          echo "=== Updating values.yaml ==="
+          echo "New tag to set: $NEW_TAG"
+          echo "Current values.yaml content (before update):"
+          cat charts/values.yaml | grep -A 3 "image:"
+          
+          # Update the file
+          python scripts/update-image-tag.py --update --tag "$NEW_TAG"
+          
+          echo "Updated values.yaml content (after update):"
+          cat charts/values.yaml | grep -A 3 "image:"
+          
+          # Verify the update
+          UPDATED_TAG=$(python -c "import yaml; f=open('charts/values.yaml'); d=yaml.safe_load(f); print(d.get('image', {}).get('tag', 'NOT_FOUND'))")
+          if [ "$UPDATED_TAG" = "$NEW_TAG" ]; then
+            echo "✓ Successfully updated tag to $NEW_TAG"
+          else
+            echo "✗ Error: Tag was not updated correctly. Expected: $NEW_TAG, Got: $UPDATED_TAG"
+            exit 1
+          fi
+
+      - name: Commit and push changes
+        if: steps.check-update.outputs.needed == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Show current status
+          echo "Current branch: $(git branch --show-current)"
+          echo "Current tag in values.yaml: $(python -c "import yaml; f=open('charts/values.yaml'); d=yaml.safe_load(f); print(d.get('image', {}).get('tag', 'latest'))")"
+          echo "New tag to set: ${{ steps.determine-tag.outputs.tag }}"
+          
+          # Check if there are changes
+          git add charts/values.yaml
+          if git diff --staged --quiet; then
+            echo "No changes to commit. File may already be up to date."
+            exit 0
+          fi
+          
+          # Show the diff
+          echo "Changes to be committed:"
+          git diff --staged charts/values.yaml
+          
+          # Commit and push
+          git commit -m "chore: update image tag to ${{ steps.determine-tag.outputs.tag }} [auto-update]"
+          
+          # Push to develop branch (where values.yaml should be updated)
+          CURRENT_BRANCH=$(git branch --show-current)
+          echo "Current branch: $CURRENT_BRANCH"
+          
+          if [ "$CURRENT_BRANCH" != "develop" ]; then
+            echo "Switching to develop branch..."
+            git checkout -b develop origin/develop 2>/dev/null || git checkout develop
+          fi
+          
+          git push origin develop
+          
+          echo "✓ Successfully updated and pushed values.yaml"
+
+      - name: Create Pull Request (if direct push fails)
+        if: steps.check-update.outputs.needed == 'true' && failure()
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore: update image tag to ${{ steps.determine-tag.outputs.tag }} [auto-update]'
+          title: 'chore: Update image tag to ${{ steps.determine-tag.outputs.tag }}'
+          body: |
+            This PR automatically updates the image tag in `charts/values.yaml` to the new tag.
+            
+            **New tag:** ${{ steps.determine-tag.outputs.tag }}
+            **Previous tag:** ${{ steps.current-tag.outputs.tag }}
+            **Triggered by:** ${{ steps.determine-tag.outputs.source }}
+          branch: update-image-tag-${{ steps.determine-tag.outputs.tag }}
+          delete-branch: true

@@ -73,7 +73,7 @@ jobs:
     if: always() && (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v')) && github.event_name == 'push' && (needs.build-and-test.result == 'success' || needs.build-and-test.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
     steps:
       - name: Checkout code
@@ -118,6 +118,49 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Extract tag for values.yaml update
+        id: extract-tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          # Extract version from tag (v1.2.3 -> 1.2.3)
+          TAG_NAME="${{ github.ref_name }}"
+          VERSION="${TAG_NAME#v}"  # Remove 'v' prefix if present
+          echo "tag=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted tag: $VERSION from $TAG_NAME"
+
+      - name: Trigger values.yaml update
+        if: startsWith(github.ref, 'refs/tags/v') && steps.extract-tag.outputs.tag != ''
+        env:
+          # Try PAT first, fallback to GITHUB_TOKEN
+          GITHUB_TOKEN: ${{ secrets.REPO_DISPATCH_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          # Use GitHub API to trigger repository_dispatch
+          # Note: If this fails, create a Personal Access Token (PAT) with 'repo' scope
+          # and add it as a secret named 'REPO_DISPATCH_TOKEN'
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            https://api.github.com/repos/${{ github.repository }}/dispatches \
+            -d '{
+              "event_type": "image-pushed",
+              "client_payload": {
+                "tag": "${{ steps.extract-tag.outputs.tag }}",
+                "image": "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}",
+                "ref": "${{ github.ref }}"
+              }
+            }')
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          if [ "$HTTP_CODE" = "204" ]; then
+            echo "✓ Repository dispatch triggered successfully for tag: ${{ steps.extract-tag.outputs.tag }}"
+          else
+            echo "⚠ Repository dispatch failed with HTTP $HTTP_CODE"
+            echo "Response: $BODY"
+            echo "Note: The update-image-tag workflow will still trigger via workflow_run after CI/CD completes"
+          fi
 
   # Deploys to Kubernetes on main branch push (uses values.yaml tag)
   deploy:
