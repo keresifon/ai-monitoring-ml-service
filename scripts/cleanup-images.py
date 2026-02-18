@@ -6,10 +6,33 @@ Keeps a specified number of latest versions and specific tags.
 
 import argparse
 import os
+import re
 import sys
 import requests
 from datetime import datetime
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Tuple
+
+GHCR_PREFIX = "ghcr.io/"
+
+
+def _parse_ghcr_repository(repository: str) -> Tuple[str, str]:
+    """Parse a GHCR repository string into (owner, repo) with validation."""
+    if repository.startswith(GHCR_PREFIX):
+        repo_path = repository[len(GHCR_PREFIX):]
+    else:
+        repo_path = repository
+
+    if '/' not in repo_path:
+        raise ValueError(f"Invalid repository path (expected 'owner/repo'): {repository}")
+
+    owner, repo = repo_path.split('/', 1)
+
+    if not re.match(r'^[a-zA-Z0-9._-]+$', owner):
+        raise ValueError(f"Invalid repository owner: {owner}")
+    if not re.match(r'^[a-zA-Z0-9._-]+$', repo):
+        raise ValueError(f"Invalid repository name: {repo}")
+
+    return owner, repo
 
 
 def get_package_versions(repository: str, github_token: str) -> tuple[List[dict], bool]:
@@ -23,13 +46,7 @@ def get_package_versions(repository: str, github_token: str) -> tuple[List[dict]
     Returns:
         Tuple of (list of package versions, is_user_owned)
     """
-    # Extract owner and repo from repository path
-    if repository.startswith('ghcr.io/'):
-        repo_path = repository.replace('ghcr.io/', '')
-    else:
-        repo_path = repository
-    
-    owner, repo = repo_path.split('/', 1)
+    owner, repo = _parse_ghcr_repository(repository)
     
     # Try user endpoint first (for user-owned packages)
     # If that fails with 404, try org endpoint
@@ -112,13 +129,7 @@ def delete_package_version(version_id: int, repository: str, github_token: str, 
         github_token: GitHub token for authentication
         is_user: Whether the package is user-owned (True) or org-owned (False)
     """
-    # Extract owner and repo
-    if repository.startswith('ghcr.io/'):
-        repo_path = repository.replace('ghcr.io/', '')
-    else:
-        repo_path = repository
-    
-    owner, repo = repo_path.split('/', 1)
+    owner, repo = _parse_ghcr_repository(repository)
     
     # Use appropriate endpoint based on ownership
     if is_user:

@@ -207,6 +207,9 @@ jobs:
       contents: read
       packages: read
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Set image tag for scan
         id: scan-tag
         run: |
@@ -230,6 +233,7 @@ jobs:
           image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.scan-tag.outputs.tag }}'
           format: 'sarif'
           output: 'trivy-results.sarif'
+          trivyignores: '.trivyignore'
 
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v4

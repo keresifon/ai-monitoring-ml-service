@@ -11,7 +11,29 @@ import sys
 import yaml
 import requests
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
+
+GHCR_PREFIX = "ghcr.io/"
+
+
+def _parse_ghcr_repository(repository: str) -> Tuple[str, str]:
+    """Parse a GHCR repository string into (owner, repo) with validation."""
+    if repository.startswith(GHCR_PREFIX):
+        repo_path = repository[len(GHCR_PREFIX):]
+    else:
+        repo_path = repository
+
+    if '/' not in repo_path:
+        raise ValueError(f"Invalid repository path (expected 'owner/repo'): {repository}")
+
+    owner, repo = repo_path.split('/', 1)
+
+    if not re.match(r'^[a-zA-Z0-9._-]+$', owner):
+        raise ValueError(f"Invalid repository owner: {owner}")
+    if not re.match(r'^[a-zA-Z0-9._-]+$', repo):
+        raise ValueError(f"Invalid repository name: {repo}")
+
+    return owner, repo
 
 
 def get_latest_tag_from_ghcr(repository: str, github_token: Optional[str] = None) -> Optional[str]:
@@ -25,14 +47,7 @@ def get_latest_tag_from_ghcr(repository: str, github_token: Optional[str] = None
     Returns:
         Latest tag or None if not found
     """
-    # Extract owner and repo from repository path
-    # Format: ghcr.io/owner/repo or owner/repo
-    if repository.startswith('ghcr.io/'):
-        repo_path = repository.replace('ghcr.io/', '')
-    else:
-        repo_path = repository
-    
-    owner, repo = repo_path.split('/', 1)
+    owner, repo = _parse_ghcr_repository(repository)
     
     headers = {
         'Accept': 'application/vnd.github.v3+json',

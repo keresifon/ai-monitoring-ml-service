@@ -3,11 +3,14 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Apply OS security patches and install build dependencies
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip, wheel, setuptools to fix known CVEs before installing deps
+RUN pip install --no-cache-dir --upgrade pip wheel setuptools
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
@@ -16,18 +19,29 @@ RUN pip install --no-cache-dir --user -r requirements.txt
 # Final stage
 FROM python:3.11-slim
 
+# Apply all available OS security patches (glibc, util-linux, libtasn1, sqlite, curl)
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
 # Create a non-root user for security
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 WORKDIR /app
 
-# Install curl for health checks
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
 # Copy Python dependencies from builder to user's home directory
 COPY --from=builder /root/.local /home/appuser/.local
+
+# Upgrade base image Python tools to fix CVEs (wheel, jaraco.context, pip),
+# then remove them from the runtime image since they are not needed
+RUN pip install --no-cache-dir --upgrade pip wheel setuptools jaraco.context && \
+    rm -rf /usr/local/lib/python3.11/site-packages/pip* \
+           /usr/local/lib/python3.11/site-packages/wheel* \
+           /usr/local/lib/python3.11/site-packages/setuptools* \
+           /usr/local/lib/python3.11/site-packages/pkg_resources* \
+           /usr/local/lib/python3.11/site-packages/jaraco* \
+           /usr/local/bin/pip* /usr/local/bin/pip3* \
+           /usr/local/bin/wheel
 
 # Make sure scripts in .local are usable
 ENV PATH=/home/appuser/.local/bin:$PATH
