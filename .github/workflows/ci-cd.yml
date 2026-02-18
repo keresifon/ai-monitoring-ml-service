@@ -53,6 +53,11 @@ jobs:
         run: |
           pytest tests/ -v --cov=app --cov-report=xml
 
+      - name: Audit Python dependencies
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt
+
       - name: SonarCloud Scan
         # Using full commit SHA for security (S7637) - master branch
         uses: SonarSource/sonarcloud-github-action@ba3875ecf642b2129de2b589510c81a8b53dbf4e
@@ -66,6 +71,35 @@ jobs:
         with:
           files: coverage.xml
           fail_ci_if_error: false
+
+  # CodeQL SAST - runs in parallel with build-and-test
+  sast-codeql:
+    runs-on: ubuntu-latest
+    if: "!startsWith(github.ref, 'refs/tags/') && github.ref != 'refs/heads/main'"
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: python
+          build-mode: none
+
+      - name: Perform CodeQL Analysis
+        id: codeql-analysis
+        uses: github/codeql-action/analyze@v4
+
+      - name: Upload CodeQL SARIF as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-sarif-results
+          path: ${{ steps.codeql-analysis.outputs.sarif-output }}
+          retention-days: 30
 
   # Builds Docker image on develop (with sha) or version tags (with semver)
   docker-build:
@@ -161,6 +195,47 @@ jobs:
             echo "Response: $BODY"
             echo "Note: The update-image-tag workflow will still trigger via workflow_run after CI/CD completes"
           fi
+
+  # Trivy container image scanning
+  image-scan:
+    needs: [docker-build]
+    if: always() && (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v')) && github.event_name == 'push' && needs.docker-build.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+      packages: read
+    steps:
+      - name: Set image tag for scan
+        id: scan-tag
+        run: |
+          REF="${{ github.ref_name }}"
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "tag=${REF#v}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=develop" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.34.0
+        with:
+          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.scan-tag.outputs.tag }}'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: 'trivy-container'
 
   # Deploys to Kubernetes on main branch push (uses values.yaml tag)
   deploy:
