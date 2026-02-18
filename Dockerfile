@@ -1,15 +1,19 @@
-# Multi-stage build for ML Service
-FROM python:3.11-slim AS builder
+# Multi-stage build for ML Service (Alpine-based for minimal CVE surface)
+FROM python:3.11-alpine AS builder
 
 WORKDIR /app
 
-# Apply OS security patches and install build dependencies
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+# Install build dependencies for C extensions (numpy, scikit-learn, pandas, psycopg2)
+RUN apk add --no-cache \
     gcc \
     g++ \
-    && rm -rf /var/lib/apt/lists/*
+    musl-dev \
+    linux-headers \
+    libffi-dev \
+    postgresql-dev \
+    openblas-dev
 
-# Upgrade pip, wheel, setuptools to fix known CVEs before installing deps
+# Upgrade pip, wheel, setuptools before installing deps
 RUN pip install --no-cache-dir --upgrade pip wheel setuptools
 
 # Copy requirements and install Python dependencies
@@ -17,25 +21,26 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
 
 # Final stage
-FROM python:3.11-slim
+FROM python:3.11-alpine
 
-# Apply all available OS security patches (glibc, util-linux, libtasn1, sqlite, curl)
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# Install only runtime libraries needed by compiled extensions and curl for healthcheck
+RUN apk add --no-cache \
+    libstdc++ \
+    openblas \
+    libpq \
+    libffi \
+    curl
 
 # Create a non-root user for security
-RUN groupadd -r appuser && useradd -r -g appuser appuser
+RUN addgroup -S appuser && adduser -S -G appuser appuser
 
 WORKDIR /app
 
-# Copy Python dependencies from builder to user's home directory
+# Copy Python dependencies from builder
 COPY --from=builder /root/.local /home/appuser/.local
 
-# Upgrade base image Python tools to fix CVEs (wheel, jaraco.context, pip),
-# then remove them from the runtime image since they are not needed
-RUN pip install --no-cache-dir --upgrade pip wheel setuptools jaraco.context && \
-    rm -rf /usr/local/lib/python3.11/site-packages/pip* \
+# Remove pip/wheel/setuptools from runtime image (not needed, avoids CVE surface)
+RUN rm -rf /usr/local/lib/python3.11/site-packages/pip* \
            /usr/local/lib/python3.11/site-packages/wheel* \
            /usr/local/lib/python3.11/site-packages/setuptools* \
            /usr/local/lib/python3.11/site-packages/pkg_resources* \
@@ -46,13 +51,12 @@ RUN pip install --no-cache-dir --upgrade pip wheel setuptools jaraco.context && 
 # Make sure scripts in .local are usable
 ENV PATH=/home/appuser/.local/bin:$PATH
 
-# Copy only necessary application files (explicit copy to avoid sensitive data)
-# .dockerignore provides additional protection
+# Copy only necessary application files
 COPY main.py ./
 COPY app/ ./app/
 COPY requirements.txt ./
 
-# Create models directory and set proper ownership for all files
+# Create models directory and set proper ownership
 RUN mkdir -p models && \
     chown -R appuser:appuser /app /home/appuser/.local
 
