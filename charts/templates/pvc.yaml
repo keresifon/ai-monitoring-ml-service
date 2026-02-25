@@ -3,6 +3,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ include "ml-service.fullname" . }}-pvc
+  namespace: ai-monitoring
   labels:
     {{- include "ml-service.labels" . | nindent 4 }}
 spec:

@@ -241,14 +241,24 @@ jobs:
           sarif_file: 'trivy-results.sarif'
           category: 'trivy-container'
 
-  # Deploys to Kubernetes on main branch push (uses values.yaml tag)
+  # Deploys to AKS on main branch push (uses values.yaml tag)
   deploy:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout code
         # Using full commit SHA for security (S7637) - v4 tag
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Set up Helm
         # Using full commit SHA for security (S7637) - v3 tag
@@ -256,18 +266,44 @@ jobs:
         with:
           version: v3.13.0
 
-      # Add your kubectl/kubeconfig setup and helm upgrade here
-      # - name: Set up kubeconfig
-      #   run: echo "${{ secrets.KUBECONFIG }}" | base64 -d > kubeconfig
-      
-      # - name: Deploy with Helm
-      #   run: |
-      #     helm upgrade --install ml-service ./charts \
-      #       --namespace ai-monitoring \
-      #       -f charts/values.yaml
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.28.0'
 
-      - name: Deployment placeholder
-        run: echo "Deploy to Kubernetes using image tag from values.yaml"
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials \
+            --resource-group ${{ secrets.AKS_RESOURCE_GROUP }} \
+            --name ${{ secrets.AKS_CLUSTER_NAME }} \
+            --overwrite-existing
+
+      - name: Create namespace if not exists
+        run: |
+          kubectl create namespace ai-monitoring --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install ml-service ./charts \
+            --namespace ai-monitoring \
+            --create-namespace \
+            --wait \
+            --timeout 5m \
+            -f charts/values.yaml
+
+      - name: Verify deployment
+        run: |
+          echo "Checking deployment status..."
+          kubectl rollout status deployment/ml-service -n ai-monitoring --timeout=5m
+          echo ""
+          echo "Pods:"
+          kubectl get pods -n ai-monitoring -l app.kubernetes.io/name=ml-service -o wide
+          echo ""
+          echo "Services:"
+          kubectl get svc -n ai-monitoring -l app.kubernetes.io/name=ml-service
+          echo ""
+          echo "HPA:"
+          kubectl get hpa -n ai-monitoring
 
   helm-lint:
     runs-on: ubuntu-latest

@@ -8,6 +8,8 @@ FastAPI-based machine learning service for log anomaly detection using Isolation
 - **REST API**: FastAPI with automatic OpenAPI documentation
 - **Model Persistence**: Save and load trained models
 - **Batch Predictions**: Process multiple logs efficiently
+- **Kubernetes/AKS Deployment**: Dedicated node pool with auto-scaling
+- **CI/CD Pipeline**: Automated build, test, and deployment
 - **Health Checks**: Kubernetes-ready health and readiness endpoints
 
 ## API Endpoints
@@ -46,6 +48,35 @@ open http://localhost:8000/docs
 ```bash
 # Build image
 docker build -t ml-service:latest .
+
+
+### Kubernetes/AKS Deployment
+
+The ML service is designed to run on AKS with efficient resource management and auto-scaling.
+
+**Quick Deploy:**
+```bash
+# Get AKS credentials
+az aks get-credentials --resource-group <rg-name> --name <cluster-name>
+
+# Deploy with Helm
+helm upgrade --install ml-service ./charts \
+  --namespace ai-monitoring \
+  --create-namespace \
+  -f charts/values.yaml
+```
+
+**Automated CI/CD:**
+- Push version tag (e.g., `v1.0.0`) to trigger build and deployment
+- Merge to `main` branch to deploy to AKS
+
+**Configuration:**
+- **Resources**: 250m-1 CPU, 512Mi-2Gi memory (optimized for shared node pool)
+- **Auto-scaling**: HPA enabled (1-2 replicas based on CPU/memory utilization)
+- **Storage**: 5Gi persistent volume for model caching
+- **Health Checks**: Liveness and readiness probes configured
+
+The service runs on the system node pool alongside other workloads with appropriate resource limits to ensure stable operation.
 
 # Run container
 docker run -p 8000:8000 ml-service:latest

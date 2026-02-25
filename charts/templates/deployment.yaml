@@ -2,8 +2,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "ml-service.fullname" . }}
+  namespace: ai-monitoring
   labels:
     {{- include "ml-service.labels" . | nindent 4 }}
+    tier: backend
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
@@ -15,9 +17,18 @@ spec:
     metadata:
       labels:
         {{- include "ml-service.selectorLabels" . | nindent 8 }}
+        tier: backend
     spec:
       serviceAccountName: {{ include "ml-service.serviceAccountName" . }}
       automountServiceAccountToken: false
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -31,6 +42,10 @@ spec:
               value: {{ .Values.env.MODEL_PATH | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.env.LOG_LEVEL | quote }}
+            {{- if .Values.env.MODEL_TYPE }}
+            - name: MODEL_TYPE
+              value: {{ .Values.env.MODEL_TYPE | quote }}
+            {{- end }}
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
           readinessProbe:
