@@ -4,8 +4,8 @@ Anomaly detection endpoints
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timezone
 import logging
+from app.utils import get_current_timestamp, is_model_loaded
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,7 @@ async def predict_anomaly(
     """
     model_service = request.app.state.model_service
     
-    if model_service is None or model_service.model is None:
+    if not is_model_loaded(model_service):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Model not loaded. Please train a model first using /api/v1/train endpoint"
@@ -91,7 +91,7 @@ async def predict_anomaly(
             is_anomaly=result["is_anomaly"],
             anomaly_score=result["anomaly_score"],
             confidence=result["confidence"],
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=get_current_timestamp(),
             model_version=model_service.model_version
         )
         
@@ -120,7 +120,7 @@ async def predict_anomaly_batch(
     """
     model_service = request.app.state.model_service
     
-    if model_service is None or model_service.model is None:
+    if not is_model_loaded(model_service):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Model not loaded. Please train a model first"
@@ -136,7 +136,7 @@ async def predict_anomaly_batch(
                     is_anomaly=result["is_anomaly"],
                     anomaly_score=result["anomaly_score"],
                     confidence=result["confidence"],
-                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    timestamp=get_current_timestamp(),
                     model_version=model_service.model_version
                 )
             )
@@ -217,7 +217,7 @@ async def get_model_info(request: Request) -> Dict[str, Any]:
     """
     model_service = request.app.state.model_service
     
-    if model_service is None or model_service.model is None:
+    if not is_model_loaded(model_service):
         return {
             "status": "not_loaded",
             "message": "No model is currently loaded"

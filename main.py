@@ -2,14 +2,14 @@
 AI Log Monitoring - ML Service
 FastAPI application for anomaly detection using Isolation Forest
 """
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
-from datetime import datetime, timezone
 
 from app.api import health, anomaly
 from app.services.model_service import ModelService
+from app.utils import get_current_timestamp
 
 # Configure logging
 logging.basicConfig(
@@ -78,7 +78,7 @@ async def root():
         "service": "AI Log Monitoring - ML Service",
         "version": "1.0.0",
         "status": "running",
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "timestamp": get_current_timestamp()
     }
 
 

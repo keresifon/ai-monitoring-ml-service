@@ -172,8 +172,14 @@ async def check_anomaly(log_entry):
 ### Running Tests
 
 ```bash
+# Recommended: use run_tests.sh (isolates venv from ~/.local packages)
+./run_tests.sh
+
+# Or run pytest directly (ensure venv is activated)
 pytest tests/ -v
 ```
+
+**Note:** If you see `Client.__init__() got an unexpected keyword argument 'app'`, Python may be loading packages from `~/.local`. Run `./run_tests.sh` which sets `PYTHONNOUSERSITE=1` to fix this.
 
 ### Code Quality
 
