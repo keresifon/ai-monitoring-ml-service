@@ -7,6 +7,7 @@ from unittest.mock import Mock
 from fastapi import FastAPI
 from app.services.model_service import ModelService
 from app.api import health, anomaly
+from app.api.anomaly import _build_prediction_response, _require_model_loaded
 
 
 # Create a test app without lifespan to avoid loading models from disk
@@ -58,9 +59,44 @@ def test_client(test_app):
         yield client
 
 
+class TestAnomalyHelpers:
+    """Test cases for anomaly module helpers"""
+
+    def test_build_prediction_response(self):
+        """Test _build_prediction_response creates correct response"""
+        result = _build_prediction_response(
+            log_id="test-1",
+            result={"is_anomaly": True, "anomaly_score": 0.9, "confidence": 0.95},
+            model_version="v1.0.0"
+        )
+        assert result.log_id == "test-1"
+        assert result.is_anomaly is True
+        assert result.anomaly_score == 0.9
+        assert result.confidence == 0.95
+        assert result.model_version == "v1.0.0"
+        assert result.timestamp  # ISO format string from get_current_timestamp
+
+    def test_require_model_loaded_raises_when_none(self):
+        """Test _require_model_loaded raises 503 when model not loaded"""
+        from fastapi import HTTPException
+
+        mock_service = Mock()
+        mock_service.model = None
+        with pytest.raises(HTTPException) as exc_info:
+            _require_model_loaded(mock_service)
+        assert exc_info.value.status_code == 503
+        assert "not loaded" in exc_info.value.detail.lower()
+
+    def test_require_model_loaded_passes_when_loaded(self):
+        """Test _require_model_loaded does nothing when model loaded"""
+        mock_service = Mock()
+        mock_service.model = Mock()
+        _require_model_loaded(mock_service)  # Should not raise
+
+
 class TestRootEndpoint:
     """Test cases for root endpoint"""
-    
+
     def test_root(self, test_client):
         """Test root endpoint"""
         response = test_client.get("/")
@@ -441,6 +477,36 @@ class TestModelTraining:
 
         assert response.status_code == 500
         assert "Error training model" in response.json()["detail"]
+
+    def test_train_with_real_model_service(self, test_app):
+        """Test train endpoint with real ModelService (full train/save flow)"""
+        import tempfile
+        import shutil
+
+        temp_dir = tempfile.mkdtemp()
+        try:
+            service = ModelService(model_dir=temp_dir)
+            test_app.state.model_service = service
+
+            with TestClient(test_app) as client:
+                response = client.post(
+                    "/api/v1/train",
+                    json={
+                        "training_data": [
+                            {"message_length": 50, "level": "INFO", "service": "api",
+                             "has_exception": False, "has_timeout": False, "has_connection_error": False},
+                            {"message_length": 100, "level": "ERROR", "service": "db",
+                             "has_exception": True, "has_timeout": False, "has_connection_error": False},
+                        ],
+                        "contamination": 0.1,
+                    },
+                )
+                assert response.status_code == 200
+                data = response.json()
+                assert data["status"] == "success"
+                assert data["samples_trained"] == 2
+        finally:
+            shutil.rmtree(temp_dir)
 
     def test_train_model_service_not_initialized(self, test_client):
         """Test train returns 500 when model service is None"""
