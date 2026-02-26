@@ -290,17 +290,16 @@ jobs:
 
       - name: Deploy with Helm
         run: |
+          # Skip --wait so we don't block if pods crash (e.g. before fixes); manifests still apply
           helm upgrade --install ml-service ./charts \
             --namespace ai-monitoring \
             --create-namespace \
-            --wait \
-            --timeout 8m \
             -f charts/values.yaml
 
       - name: Verify deployment
         run: |
           echo "Checking deployment status..."
-          kubectl rollout status deployment/ml-service -n ai-monitoring --timeout=8m
+          kubectl rollout status deployment/ml-service -n ai-monitoring --timeout=2m
           echo ""
           echo "Pods:"
           kubectl get pods -n ai-monitoring -l app.kubernetes.io/name=ml-service -o wide

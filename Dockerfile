@@ -24,8 +24,10 @@ RUN pip install --no-cache-dir --user -r requirements.txt
 FROM python:3.11-alpine
 
 # Install only runtime libraries needed by compiled extensions and curl for healthcheck
+# libgomp: required by scikit-learn for OpenMP parallelism
 RUN apk add --no-cache \
     libstdc++ \
+    libgomp \
     openblas \
     libpq \
     libffi \
