@@ -25,10 +25,11 @@ jobs:
     # 1. workflow_run completed successfully (will check if it was a tag in the step)
     # 2. repository_dispatch (from docker-build job after image is pushed - PRIMARY METHOD)
     # 3. workflow_dispatch (manual trigger)
+    # Security (S7631): Do not run when triggered by fork PR - prevent untrusted code execution
     if: |
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      ((github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event != 'pull_request') ||
       github.event_name == 'repository_dispatch' ||
-      github.event_name == 'workflow_dispatch'
+      github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       contents: write
