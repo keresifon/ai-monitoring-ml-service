@@ -247,6 +247,34 @@ class TestAnomalyPrediction:
         # Clean up
         test_client.app.state.model_service.model = None
     
+    def test_predict_with_optional_features(self, test_client):
+        """Test predict accepts LogFeatures with optional timestamp and metadata"""
+        test_client.app.state.model_service.model = Mock()
+        test_client.app.state.model_service.predict = Mock(
+            return_value={"is_anomaly": False, "anomaly_score": 0.2, "confidence": 0.8}
+        )
+
+        response = test_client.post(
+            "/api/v1/predict",
+            json={
+                "log_id": "log-opt",
+                "features": {
+                    "message_length": 80,
+                    "level": "WARN",
+                    "service": "api",
+                    "has_exception": False,
+                    "has_timeout": False,
+                    "has_connection_error": False,
+                    "timestamp": "2024-01-15T10:00:00",
+                    "metadata": {"key": "value"},
+                },
+            },
+        )
+        test_client.app.state.model_service.model = None
+
+        assert response.status_code == 200
+        assert response.json()["log_id"] == "log-opt"
+
     def test_predict_with_invalid_features(self, test_client):
         """Test prediction with missing required features"""
         prediction_request = {
@@ -434,10 +462,29 @@ class TestModelTraining:
             ],
             "contamination": 0.6  # Invalid: must be <= 0.5
         }
-        
+
         response = test_client.post("/api/v1/train", json=training_request)
-        
+
         assert response.status_code == 422  # Validation error
+
+    def test_train_with_contamination_boundary(self, test_client):
+        """Test training with valid contamination at upper boundary (0.5)"""
+        test_client.app.state.model_service.train = Mock()
+        test_client.app.state.model_service.save_model = Mock()
+        test_client.app.state.model_service.model_version = "v1.0.0"
+        test_client.app.state.model_service.trained_at = "2024-01-01T00:00:00"
+
+        response = test_client.post(
+            "/api/v1/train",
+            json={
+                "training_data": [
+                    {"message_length": 50, "level": "INFO", "service": "api",
+                     "has_exception": False, "has_timeout": False, "has_connection_error": False},
+                ],
+                "contamination": 0.5,
+            },
+        )
+        assert response.status_code == 200
     
     def test_train_with_empty_data(self, test_client):
         """Test training with empty training data"""
@@ -457,6 +504,35 @@ class TestModelTraining:
             side_effect=RuntimeError("Training failed")
         )
         test_client.app.state.model_service.save_model = Mock()
+
+        response = test_client.post(
+            "/api/v1/train",
+            json={
+                "training_data": [
+                    {
+                        "message_length": 50,
+                        "level": "INFO",
+                        "service": "api",
+                        "has_exception": False,
+                        "has_timeout": False,
+                        "has_connection_error": False,
+                    }
+                ],
+                "contamination": 0.1,
+            },
+        )
+
+        assert response.status_code == 500
+        assert "Error training model" in response.json()["detail"]
+
+    def test_train_save_model_exception(self, test_client):
+        """Test train returns 500 when save_model raises"""
+        test_client.app.state.model_service.train = Mock()
+        test_client.app.state.model_service.save_model = Mock(
+            side_effect=OSError("Disk full")
+        )
+        test_client.app.state.model_service.model_version = "v1.0.0"
+        test_client.app.state.model_service.trained_at = "2024-01-01T00:00:00"
 
         response = test_client.post(
             "/api/v1/train",

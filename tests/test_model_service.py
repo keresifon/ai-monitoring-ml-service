@@ -4,6 +4,7 @@ Unit tests for ML Model Service
 import os
 import pytest
 import numpy as np
+from unittest.mock import Mock
 from app.services.model_service import ModelService
 
 
@@ -68,9 +69,20 @@ class TestModelService:
     def test_predict_without_training_raises_error(self, model_service):
         """Test that prediction without training raises an error"""
         log_data = {"message_length": 50, "level": "INFO", "service": "test"}
-        
+
         with pytest.raises(ValueError, match="Model not trained"):
             model_service.predict(log_data)
+
+    def test_predict_with_scaler_none_raises_error(self, model_service):
+        """Test predict raises when model exists but scaler is None"""
+        model_service.model = Mock()  # Model set but scaler not
+        model_service.scaler = None
+
+        with pytest.raises(ValueError, match="Model not trained"):
+            model_service.predict({
+                "message_length": 50, "level": "INFO", "service": "test",
+                "has_exception": False, "has_timeout": False, "has_connection_error": False
+            })
     
     def test_model_version(self, model_service):
         """Test that model has a version"""
