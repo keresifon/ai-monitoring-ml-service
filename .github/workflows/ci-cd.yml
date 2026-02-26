@@ -285,13 +285,13 @@ jobs:
             --namespace ai-monitoring \
             --create-namespace \
             --wait \
-            --timeout 5m \
+            --timeout 8m \
             -f charts/values.yaml
 
       - name: Verify deployment
         run: |
           echo "Checking deployment status..."
-          kubectl rollout status deployment/ml-service -n ai-monitoring --timeout=5m
+          kubectl rollout status deployment/ml-service -n ai-monitoring --timeout=8m
           echo ""
           echo "Pods:"
           kubectl get pods -n ai-monitoring -l app.kubernetes.io/name=ml-service -o wide
@@ -301,6 +301,18 @@ jobs:
           echo ""
           echo "HPA:"
           kubectl get hpa -n ai-monitoring
+
+      - name: Debug pod (on failure)
+        if: failure()
+        run: |
+          echo "=== Pod status ==="
+          kubectl get pods -n ai-monitoring -l app.kubernetes.io/name=ml-service -o wide
+          echo ""
+          echo "=== Pod description ==="
+          kubectl describe pods -n ai-monitoring -l app.kubernetes.io/name=ml-service
+          echo ""
+          echo "=== Pod logs (if any) ==="
+          kubectl logs -n ai-monitoring -l app.kubernetes.io/name=ml-service --tail=100 --all-containers=true 2>/dev/null || true
 
   helm-lint:
     runs-on: ubuntu-latest
