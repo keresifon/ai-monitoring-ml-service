@@ -63,6 +63,12 @@ class TestMainApp:
             origins = _get_cors_origins()
         assert origins == ["https://a.com", "https://b.com"]
 
+    def test_cors_origins_with_spaces(self):
+        """Test CORS origins with spaces are stripped"""
+        with patch("main.os.getenv", return_value="https://a.com , https://b.com"):
+            origins = _get_cors_origins()
+        assert origins == ["https://a.com", "https://b.com"]
+
     def test_routers_included(self):
         """Test that routers are included"""
         routes = [route.path for route in app.routes]

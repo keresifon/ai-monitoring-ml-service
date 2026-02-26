@@ -138,12 +138,21 @@ class TestHealthEndpoint:
     def test_readiness_check(self, test_client):
         """Test readiness endpoint"""
         response = test_client.get("/api/v1/ready")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "ready" in data
         assert data["ready"] is False  # Model not loaded
         assert "timestamp" in data
+
+    def test_readiness_check_when_model_loaded(self, test_client):
+        """Test readiness returns True when model is loaded"""
+        test_client.app.state.model_service.model = Mock()
+        response = test_client.get("/api/v1/ready")
+        test_client.app.state.model_service.model = None
+
+        assert response.status_code == 200
+        assert response.json()["ready"] is True
 
 
 class TestModelInfo:
@@ -485,6 +494,25 @@ class TestModelTraining:
             },
         )
         assert response.status_code == 200
+
+    def test_train_with_contamination_zero(self, test_client):
+        """Test training with contamination at lower boundary (0.0)"""
+        test_client.app.state.model_service.train = Mock()
+        test_client.app.state.model_service.save_model = Mock()
+        test_client.app.state.model_service.model_version = "v1.0.0"
+        test_client.app.state.model_service.trained_at = "2024-01-01T00:00:00"
+
+        response = test_client.post(
+            "/api/v1/train",
+            json={
+                "training_data": [
+                    {"message_length": 50, "level": "INFO", "service": "api",
+                     "has_exception": False, "has_timeout": False, "has_connection_error": False},
+                ],
+                "contamination": 0.0,
+            },
+        )
+        assert response.status_code == 200
     
     def test_train_with_empty_data(self, test_client):
         """Test training with empty training data"""
@@ -581,6 +609,49 @@ class TestModelTraining:
                 data = response.json()
                 assert data["status"] == "success"
                 assert data["samples_trained"] == 2
+
+                # Predict with the trained model (full API flow)
+                pred_response = client.post(
+                    "/api/v1/predict",
+                    json={
+                        "log_id": "post-train-1",
+                        "features": {
+                            "message_length": 75,
+                            "level": "WARN",
+                            "service": "api",
+                            "has_exception": False,
+                            "has_timeout": False,
+                            "has_connection_error": False,
+                        },
+                    },
+                )
+                assert pred_response.status_code == 200
+                pred_data = pred_response.json()
+                assert pred_data["log_id"] == "post-train-1"
+                assert "is_anomaly" in pred_data
+                assert "anomaly_score" in pred_data
+
+                # Batch predict with trained model
+                batch_response = client.post(
+                    "/api/v1/predict/batch",
+                    json=[
+                        {
+                            "log_id": "batch-1",
+                            "features": {
+                                "message_length": 50,
+                                "level": "INFO",
+                                "service": "api",
+                                "has_exception": False,
+                                "has_timeout": False,
+                                "has_connection_error": False,
+                            },
+                        },
+                    ],
+                )
+                assert batch_response.status_code == 200
+                batch_data = batch_response.json()
+                assert len(batch_data) == 1
+                assert batch_data[0]["log_id"] == "batch-1"
         finally:
             shutil.rmtree(temp_dir)
 
