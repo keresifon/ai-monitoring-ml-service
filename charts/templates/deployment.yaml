@@ -7,9 +7,8 @@ metadata:
     {{- include "ml-service.labels" . | nindent 4 }}
     tier: backend
 spec:
-  {{- if not .Values.autoscaling.enabled }}
+  # Always set replicas explicitly. (HPA template not implemented - autoscaling values reserved for future use)
   replicas: {{ .Values.replicaCount }}
-  {{- end }}
   selector:
     matchLabels:
       {{- include "ml-service.selectorLabels" . | nindent 6 }}

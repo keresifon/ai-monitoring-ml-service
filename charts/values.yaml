@@ -10,7 +10,8 @@ nameOverride: ""
 fullnameOverride: ""
 
 serviceAccount:
-  create: true
+  # Use default SA (chart has no serviceaccount template). Set create+template if custom SA needed.
+  create: false
   annotations: {}
   name: ""
 
