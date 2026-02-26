@@ -47,7 +47,9 @@ env:
   MODEL_TYPE: isolation-forest
 
 persistence:
-  enabled: true
+  # Disabled by default - service works without it. Models are stored in ephemeral storage.
+  # Enable when you need model persistence across pod restarts (requires StorageClass).
+  enabled: false
   storageClass: managed-csi
   size: 5Gi
   accessMode: ReadWriteOnce
