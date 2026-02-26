@@ -247,7 +247,6 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     permissions:
       contents: read
-      id-token: write
     steps:
       - name: Checkout code
         # Using full commit SHA for security (S7637) - v4 tag
@@ -259,6 +258,7 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
 
       - name: Set up Helm
         # Using full commit SHA for security (S7637) - v3 tag
