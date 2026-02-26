@@ -4,7 +4,7 @@ Tests for main application
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import Mock, patch
-from main import app
+from main import app, _get_cors_origins
 
 
 @pytest.fixture
@@ -50,7 +50,19 @@ class TestMainApp:
         assert "access-control-allow-origin" in [
             h.lower() for h in response.headers
         ]
-    
+
+    def test_cors_origins_default(self):
+        """Test default CORS allows all origins"""
+        with patch("main.os.getenv", return_value="*"):
+            origins = _get_cors_origins()
+        assert origins == ["*"]
+
+    def test_cors_origins_custom(self):
+        """Test custom CORS origins from env"""
+        with patch("main.os.getenv", return_value="https://a.com,https://b.com"):
+            origins = _get_cors_origins()
+        assert origins == ["https://a.com", "https://b.com"]
+
     def test_routers_included(self):
         """Test that routers are included"""
         routes = [route.path for route in app.routes]

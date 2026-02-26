@@ -74,11 +74,11 @@ class TestRootEndpoint:
 
 class TestHealthEndpoint:
     """Test cases for health check endpoint"""
-    
+
     def test_health_check(self, test_client):
         """Test that health endpoint returns 200 OK"""
         response = test_client.get("/api/v1/health")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "UP"
@@ -86,7 +86,19 @@ class TestHealthEndpoint:
         assert data["service"] == "ml-service"
         assert "model" in data
         assert data["model"]["status"] == "not_loaded"
-    
+
+    def test_health_check_with_model_loaded(self, test_client):
+        """Test health endpoint when model is loaded"""
+        test_client.app.state.model_service.model = Mock()
+        response = test_client.get("/api/v1/health")
+        test_client.app.state.model_service.model = None
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["model"]["status"] == "loaded"
+        assert "info" in data["model"]
+        assert data["model"]["info"]["version"] == "test-v1.0.0"
+
     def test_readiness_check(self, test_client):
         """Test readiness endpoint"""
         response = test_client.get("/api/v1/ready")
@@ -208,11 +220,37 @@ class TestAnomalyPrediction:
                 # Missing required fields: level, service
             }
         }
-        
+
         response = test_client.post("/api/v1/predict", json=prediction_request)
-        
+
         assert response.status_code == 422  # Validation error
-    
+
+    def test_predict_exception_handling(self, test_client):
+        """Test predict returns 500 when model raises"""
+        test_client.app.state.model_service.model = Mock()
+        test_client.app.state.model_service.predict = Mock(
+            side_effect=ValueError("Model error")
+        )
+
+        response = test_client.post(
+            "/api/v1/predict",
+            json={
+                "log_id": "log-1",
+                "features": {
+                    "message_length": 100,
+                    "level": "INFO",
+                    "service": "api",
+                    "has_exception": False,
+                    "has_timeout": False,
+                    "has_connection_error": False,
+                },
+            },
+        )
+
+        assert response.status_code == 500
+        assert "Error predicting anomaly" in response.json()["detail"]
+        test_client.app.state.model_service.model = None
+
     def test_predict_batch_without_model(self, test_client):
         """Test batch prediction fails when model not loaded"""
         batch_request = [
@@ -287,6 +325,34 @@ class TestAnomalyPrediction:
         # Clean up
         test_client.app.state.model_service.model = None
 
+    def test_predict_batch_exception_handling(self, test_client):
+        """Test batch predict returns 500 when model raises"""
+        test_client.app.state.model_service.model = Mock()
+        test_client.app.state.model_service.predict = Mock(
+            side_effect=RuntimeError("Batch error")
+        )
+
+        response = test_client.post(
+            "/api/v1/predict/batch",
+            json=[
+                {
+                    "log_id": "log-1",
+                    "features": {
+                        "message_length": 50,
+                        "level": "INFO",
+                        "service": "api",
+                        "has_exception": False,
+                        "has_timeout": False,
+                        "has_connection_error": False,
+                    },
+                },
+            ],
+        )
+
+        assert response.status_code == 500
+        assert "Error in batch prediction" in response.json()["detail"]
+        test_client.app.state.model_service.model = None
+
 
 class TestModelTraining:
     """Test cases for model training endpoint"""
@@ -343,11 +409,64 @@ class TestModelTraining:
             "training_data": [],
             "contamination": 0.1
         }
-        
+
         response = test_client.post("/api/v1/train", json=training_request)
-        
+
         # Should accept the request but may fail during training
-        # The actual behavior depends on ModelService implementation
         assert response.status_code in [200, 500]
+
+    def test_train_exception_handling(self, test_client):
+        """Test train returns 500 when model service raises"""
+        test_client.app.state.model_service.train = Mock(
+            side_effect=RuntimeError("Training failed")
+        )
+        test_client.app.state.model_service.save_model = Mock()
+
+        response = test_client.post(
+            "/api/v1/train",
+            json={
+                "training_data": [
+                    {
+                        "message_length": 50,
+                        "level": "INFO",
+                        "service": "api",
+                        "has_exception": False,
+                        "has_timeout": False,
+                        "has_connection_error": False,
+                    }
+                ],
+                "contamination": 0.1,
+            },
+        )
+
+        assert response.status_code == 500
+        assert "Error training model" in response.json()["detail"]
+
+    def test_train_model_service_not_initialized(self, test_client):
+        """Test train returns 500 when model service is None"""
+        app = test_client.app
+        saved_service = app.state.model_service
+        app.state.model_service = None
+
+        response = test_client.post(
+            "/api/v1/train",
+            json={
+                "training_data": [
+                    {
+                        "message_length": 50,
+                        "level": "INFO",
+                        "service": "api",
+                        "has_exception": False,
+                        "has_timeout": False,
+                        "has_connection_error": False,
+                    }
+                ],
+                "contamination": 0.1,
+            },
+        )
+
+        app.state.model_service = saved_service
+        assert response.status_code == 500
+        assert "not initialized" in response.json()["detail"]
 
 # Made with Bob

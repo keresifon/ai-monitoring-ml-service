@@ -58,11 +58,16 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+def _get_cors_origins() -> list:
+    """Get CORS origins from CORS_ORIGINS env var. Default: allow all."""
+    origins = os.getenv("CORS_ORIGINS", "*")
+    return [o.strip() for o in origins.split(",")] if origins != "*" else ["*"]
+
+
 # Configure CORS - use CORS_ORIGINS env var in production to restrict origins
-_cors_origins = os.getenv("CORS_ORIGINS", "*")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_cors_origins.split(",") if _cors_origins != "*" else ["*"],
+    allow_origins=_get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
