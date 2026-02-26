@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
+import os
 
 from app.api import health, anomaly
 from app.services.model_service import ModelService
@@ -57,10 +58,11 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS
+# Configure CORS - use CORS_ORIGINS env var in production to restrict origins
+_cors_origins = os.getenv("CORS_ORIGINS", "*")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=_cors_origins.split(",") if _cors_origins != "*" else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

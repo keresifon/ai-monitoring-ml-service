@@ -51,7 +51,7 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest tests/ -v --cov=app --cov-report=xml
+          pytest tests/ -v --cov=app --cov=main --cov-report=xml
 
       - name: Audit Python dependencies
         run: |
