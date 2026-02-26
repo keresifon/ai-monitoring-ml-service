@@ -279,6 +279,15 @@ jobs:
         run: |
           kubectl create namespace ai-monitoring --dry-run=client -o yaml | kubectl apply -f -
 
+      - name: Clear stuck Helm release (if any)
+        run: |
+          # Resolve "another operation is in progress" from interrupted previous deploy
+          if helm list -n ai-monitoring 2>/dev/null | grep -q ml-service; then
+            echo "Clearing any pending Helm operation..."
+            helm rollback ml-service -n ai-monitoring 2>/dev/null || true
+            sleep 5
+          fi
+
       - name: Deploy with Helm
         run: |
           helm upgrade --install ml-service ./charts \
