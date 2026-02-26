@@ -4,8 +4,8 @@ Anomaly detection endpoints
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timezone
 import logging
+from app.utils import get_current_timestamp, is_model_loaded
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +59,31 @@ class TrainingResponse(BaseModel):
     trained_at: str
 
 
+def _build_prediction_response(
+    log_id: str,
+    result: Dict[str, Any],
+    model_version: str
+) -> AnomalyPredictionResponse:
+    """Build AnomalyPredictionResponse from prediction result."""
+    return AnomalyPredictionResponse(
+        log_id=log_id,
+        is_anomaly=result["is_anomaly"],
+        anomaly_score=result["anomaly_score"],
+        confidence=result["confidence"],
+        timestamp=get_current_timestamp(),
+        model_version=model_version
+    )
+
+
+def _require_model_loaded(model_service, detail: str = "Model not loaded. Please train a model first"):
+    """Raise 503 if model is not loaded."""
+    if not is_model_loaded(model_service):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=detail
+        )
+
+
 @router.post("/predict", response_model=AnomalyPredictionResponse)
 async def predict_anomaly(
     request: Request,
@@ -75,32 +100,22 @@ async def predict_anomaly(
         Anomaly prediction result
     """
     model_service = request.app.state.model_service
-    
-    if model_service is None or model_service.model is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Model not loaded. Please train a model first using /api/v1/train endpoint"
-        )
-    
+    _require_model_loaded(
+        model_service,
+        "Model not loaded. Please train a model first using /api/v1/train endpoint"
+    )
+
     try:
-        # Predict anomaly
         result = model_service.predict(prediction_request.features.model_dump())
-        
-        return AnomalyPredictionResponse(
-            log_id=prediction_request.log_id,
-            is_anomaly=result["is_anomaly"],
-            anomaly_score=result["anomaly_score"],
-            confidence=result["confidence"],
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            model_version=model_service.model_version
+        return _build_prediction_response(
+            prediction_request.log_id, result, model_service.model_version
         )
-        
     except Exception as e:
         logger.error(f"Error predicting anomaly: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error predicting anomaly: {str(e)}"
-        )
+        ) from e
 
 
 @router.post("/predict/batch", response_model=List[AnomalyPredictionResponse])
@@ -110,45 +125,32 @@ async def predict_anomaly_batch(
 ) -> List[AnomalyPredictionResponse]:
     """
     Predict anomalies for multiple log entries
-    
+
     Args:
         request: FastAPI request object
         prediction_requests: List of prediction requests
-        
+
     Returns:
         List of anomaly prediction results
     """
     model_service = request.app.state.model_service
-    
-    if model_service is None or model_service.model is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Model not loaded. Please train a model first"
-        )
-    
+    _require_model_loaded(model_service)
+
     try:
-        results = []
-        for pred_request in prediction_requests:
-            result = model_service.predict(pred_request.features.model_dump())
-            results.append(
-                AnomalyPredictionResponse(
-                    log_id=pred_request.log_id,
-                    is_anomaly=result["is_anomaly"],
-                    anomaly_score=result["anomaly_score"],
-                    confidence=result["confidence"],
-                    timestamp=datetime.now(timezone.utc).isoformat(),
-                    model_version=model_service.model_version
-                )
+        return [
+            _build_prediction_response(
+                pr.log_id,
+                model_service.predict(pr.features.model_dump()),
+                model_service.model_version
             )
-        
-        return results
-        
+            for pr in prediction_requests
+        ]
     except Exception as e:
         logger.error(f"Error in batch prediction: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error in batch prediction: {str(e)}"
-        )
+        ) from e
 
 
 @router.post("/train", response_model=TrainingResponse)
@@ -217,7 +219,7 @@ async def get_model_info(request: Request) -> Dict[str, Any]:
     """
     model_service = request.app.state.model_service
     
-    if model_service is None or model_service.model is None:
+    if not is_model_loaded(model_service):
         return {
             "status": "not_loaded",
             "message": "No model is currently loaded"

@@ -1,0 +1,3 @@
+# Trivy ignore file for accepted LOW-severity CVEs
+# Base image: python:3.11-alpine (musl-based, minimal attack surface)
+# Reviewed and accepted as low-risk for a containerized ML service.

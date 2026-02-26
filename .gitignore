@@ -42,3 +42,6 @@ venv/
 *.jar
 *.war
 *.ear
+
+# Kubernetes documentation (reference only, not for commit)
+k8s/

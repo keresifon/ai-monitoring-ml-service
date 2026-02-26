@@ -1,0 +1,57 @@
+name: Cleanup Container Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep_latest:
+        description: 'Number of latest versions to keep (default: 5)'
+        required: false
+        type: number
+        default: 5
+      keep_tags:
+        description: 'Comma-separated tags to always keep (e.g., "latest,1.0.0,develop")'
+        required: false
+        type: string
+        default: 'latest'
+      dry_run:
+        description: 'Dry run mode (preview what would be deleted without actually deleting)'
+        required: false
+        type: boolean
+        default: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  cleanup-images:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyyaml requests
+
+      - name: Cleanup old container images
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP_LATEST: ${{ inputs.keep_latest || 5 }}
+          KEEP_TAGS: ${{ inputs.keep_tags || 'latest' }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          python scripts/cleanup-images.py \
+            --repository "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" \
+            --keep-latest "$KEEP_LATEST" \
+            --keep-tags "$KEEP_TAGS" \
+            $([ "$DRY_RUN" = "true" ] && echo "--dry-run" || echo "")

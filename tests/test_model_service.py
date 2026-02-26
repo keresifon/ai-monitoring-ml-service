@@ -4,6 +4,7 @@ Unit tests for ML Model Service
 import os
 import pytest
 import numpy as np
+from unittest.mock import Mock
 from app.services.model_service import ModelService
 
 
@@ -68,9 +69,20 @@ class TestModelService:
     def test_predict_without_training_raises_error(self, model_service):
         """Test that prediction without training raises an error"""
         log_data = {"message_length": 50, "level": "INFO", "service": "test"}
-        
+
         with pytest.raises(ValueError, match="Model not trained"):
             model_service.predict(log_data)
+
+    def test_predict_with_scaler_none_raises_error(self, model_service):
+        """Test predict raises when model exists but scaler is None"""
+        model_service.model = Mock()  # Model set but scaler not
+        model_service.scaler = None
+
+        with pytest.raises(ValueError, match="Model not trained"):
+            model_service.predict({
+                "message_length": 50, "level": "INFO", "service": "test",
+                "has_exception": False, "has_timeout": False, "has_connection_error": False
+            })
     
     def test_model_version(self, model_service):
         """Test that model has a version"""
@@ -201,6 +213,66 @@ class TestModelService:
         try:
             service = ModelService(model_dir=model_dir)
             assert os.path.exists(model_dir)
+        finally:
+            shutil.rmtree(temp_dir)
+
+    def test_save_model_success(self, trained_model_service):
+        """Test saving model to disk"""
+        import tempfile
+        import shutil
+
+        temp_dir = tempfile.mkdtemp()
+        try:
+            trained_model_service.model_dir = temp_dir
+            trained_model_service.save_model("test_model.pkl")
+            assert os.path.exists(os.path.join(temp_dir, "test_model.pkl"))
+        finally:
+            shutil.rmtree(temp_dir)
+
+    def test_save_model_without_training_raises(self, model_service):
+        """Test save_model raises when no model trained"""
+        with pytest.raises(ValueError, match="No model to save"):
+            model_service.save_model()
+
+    def test_load_model_file_not_found(self, model_service):
+        """Test load_model raises when file does not exist"""
+        import tempfile
+        import shutil
+
+        temp_dir = tempfile.mkdtemp()
+        try:
+            model_service.model_dir = temp_dir
+            with pytest.raises(FileNotFoundError, match="Model file not found"):
+                model_service.load_model("nonexistent.pkl")
+        finally:
+            shutil.rmtree(temp_dir)
+
+    def test_load_model_success(self, trained_model_service):
+        """Test loading model from disk"""
+        import tempfile
+        import shutil
+
+        temp_dir = tempfile.mkdtemp()
+        try:
+            trained_model_service.model_dir = temp_dir
+            trained_model_service.save_model("persist_test.pkl")
+
+            fresh_service = ModelService(model_dir=temp_dir)
+            fresh_service.load_model("persist_test.pkl")
+
+            assert fresh_service.model is not None
+            assert fresh_service.scaler is not None
+            assert fresh_service.model_version == trained_model_service.model_version
+
+            result = fresh_service.predict({
+                "message_length": 50,
+                "level": "INFO",
+                "service": "test",
+                "has_exception": False,
+                "has_timeout": False,
+                "has_connection_error": False
+            })
+            assert "is_anomaly" in result
         finally:
             shutil.rmtree(temp_dir)
 

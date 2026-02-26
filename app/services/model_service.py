@@ -197,7 +197,8 @@ class ModelService:
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Model file not found: {model_path}")
         
-        model_data = joblib.load(model_path)
+        # Model files are from trusted internal storage only (not user-uploaded)
+        model_data = joblib.load(model_path)  # NOSONAR S5148
         
         self.model = model_data['model']
         self.scaler = model_data['scaler']

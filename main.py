@@ -2,14 +2,15 @@
 AI Log Monitoring - ML Service
 FastAPI application for anomaly detection using Isolation Forest
 """
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
-from datetime import datetime, timezone
+import os
 
 from app.api import health, anomaly
 from app.services.model_service import ModelService
+from app.utils import get_current_timestamp
 
 # Configure logging
 logging.basicConfig(
@@ -57,10 +58,16 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS
+def _get_cors_origins() -> list:
+    """Get CORS origins from CORS_ORIGINS env var. Default: allow all."""
+    origins = os.getenv("CORS_ORIGINS", "*")
+    return [o.strip() for o in origins.split(",")] if origins != "*" else ["*"]
+
+
+# Configure CORS - use CORS_ORIGINS env var in production to restrict origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=_get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -78,7 +85,7 @@ async def root():
         "service": "AI Log Monitoring - ML Service",
         "version": "1.0.0",
         "status": "running",
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "timestamp": get_current_timestamp()
     }
 
 
@@ -86,7 +93,7 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "main:app",
-        host="0.0.0.0",
+        host="127.0.0.1",
         port=8000,
         reload=True,
         log_level="info"
