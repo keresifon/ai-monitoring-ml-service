@@ -23,6 +23,10 @@ jobs:
   detect-deployment-target:
     runs-on: ubuntu-latest
     if: github.event_name == 'issue_comment' && github.event.issue.pull_request && startsWith(github.event.comment.body, '/deploy')
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
     outputs:
       target: ${{ steps.parse.outputs.target }}
       pr_ref: ${{ steps.pr.outputs.ref }}
