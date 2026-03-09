@@ -390,7 +390,6 @@ jobs:
           helm upgrade --install ml-service ./charts \
             --namespace ${{ secrets.OPENSHIFT_PROJECT }} \
             -f charts/values.yaml \
-            --set image.tag=${{ needs.detect-deployment-target.outputs.pr_sha }} \
             --wait \
             --timeout 5m
 
@@ -509,7 +508,6 @@ jobs:
             --namespace ai-monitoring \
             --create-namespace \
             -f charts/values.yaml \
-            --set image.tag=${{ needs.detect-deployment-target.outputs.pr_sha }} \
             --wait \
             --timeout 5m
 
