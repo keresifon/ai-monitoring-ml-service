@@ -390,7 +390,6 @@ jobs:
           helm upgrade --install ml-service ./charts \
             --namespace ${{ secrets.OPENSHIFT_PROJECT }} \
             -f charts/values.yaml \
-            -f charts/values-openshift.yaml \
             --set image.tag=${{ needs.detect-deployment-target.outputs.pr_sha }} \
             --wait \
             --timeout 5m
