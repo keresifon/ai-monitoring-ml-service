@@ -29,7 +29,8 @@ jobs:
       pr_sha: ${{ steps.pr.outputs.sha }}
     steps:
       - name: Check if commenter has write access
-        uses: actions/github-script@v7
+        # Using full commit SHA for security (S7637) - v7 tag
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
         with:
           script: |
             const { data: permission } = await github.rest.repos.getCollaboratorPermissionLevel({
@@ -43,7 +44,8 @@ jobs:
 
       - name: Get PR details
         id: pr
-        uses: actions/github-script@v7
+        # Using full commit SHA for security (S7637) - v7 tag
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
         with:
           script: |
             const pr = await github.rest.pulls.get({
@@ -82,7 +84,8 @@ jobs:
           fi
 
       - name: Add reaction to comment
-        uses: actions/github-script@v7
+        # Using full commit SHA for security (S7637) - v7 tag
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
         with:
           script: |
             await github.rest.reactions.createForIssueComment({
@@ -157,20 +160,24 @@ jobs:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        # Using full commit SHA for security (S7637) - v4 tag
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
+        # Using full commit SHA for security (S7637) - v3 tag
+        uses: github/codeql-action/init@e2b3eafc8d227b0241d48be5f425d47c2d750a13
         with:
           languages: python
           build-mode: none
 
       - name: Perform CodeQL Analysis
         id: codeql-analysis
-        uses: github/codeql-action/analyze@v4
+        # Using full commit SHA for security (S7637) - v3 tag
+        uses: github/codeql-action/analyze@e2b3eafc8d227b0241d48be5f425d47c2d750a13
 
       - name: Upload CodeQL SARIF as artifact
-        uses: actions/upload-artifact@v4
+        # Using full commit SHA for security (S7637) - v4 tag
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: codeql-sarif-results
           path: ${{ steps.codeql-analysis.outputs.sarif-output }}
@@ -283,7 +290,8 @@ jobs:
       packages: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        # Using full commit SHA for security (S7637) - v4 tag
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Set image tag for scan
         id: scan-tag
@@ -296,7 +304,8 @@ jobs:
           fi
 
       - name: Log in to Container Registry
-        uses: docker/login-action@v3
+        # Using full commit SHA for security (S7637) - v3 tag
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -319,7 +328,8 @@ jobs:
             '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.scan-tag.outputs.tag }}'
 
       - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v4
+        # Using full commit SHA for security (S7637) - v3 tag
+        uses: github/codeql-action/upload-sarif@e2b3eafc8d227b0241d48be5f425d47c2d750a13
         with:
           sarif_file: 'trivy-results.sarif'
           category: 'trivy-container'
@@ -415,7 +425,8 @@ jobs:
           echo "Route URL: https://$ROUTE_URL"
 
       - name: Comment on PR with deployment info
-        uses: actions/github-script@v7
+        # Using full commit SHA for security (S7637) - v7 tag
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
         with:
           script: |
             const routeUrl = '${{ steps.route.outputs.url }}';
@@ -440,7 +451,8 @@ jobs:
 
       - name: Comment on PR with failure
         if: failure()
-        uses: actions/github-script@v7
+        # Using full commit SHA for security (S7637) - v7 tag
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
         with:
           script: |
             await github.rest.issues.createComment({
@@ -472,17 +484,20 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Azure Login
-        uses: azure/login@v2
+        # Using full commit SHA for security (S7637) - v2 tag
+        uses: azure/login@6c251865b4e6290e7b78be643ea2d005bc51f69a
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Set up Helm
+        # Using full commit SHA for security (S7637) - v3 tag
         uses: azure/setup-helm@5119fcb9089d432beecbf79bb2c7915207344b78
         with:
           version: v3.13.0
 
       - name: Set up kubectl
-        uses: azure/setup-kubectl@v4
+        # Using full commit SHA for security (S7637) - v4 tag
+        uses: azure/setup-kubectl@3e0aec4d80787158d308d7b364cb1b702e7feb7f
         with:
           version: 'v1.28.0'
 
@@ -519,7 +534,8 @@ jobs:
           kubectl get svc -n ai-monitoring -l app.kubernetes.io/name=ml-service
 
       - name: Comment on PR with deployment info
-        uses: actions/github-script@v7
+        # Using full commit SHA for security (S7637) - v7 tag
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
         with:
           script: |
             await github.rest.issues.createComment({
@@ -543,7 +559,8 @@ jobs:
 
       - name: Comment on PR with failure
         if: failure()
-        uses: actions/github-script@v7
+        # Using full commit SHA for security (S7637) - v7 tag
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
         with:
           script: |
             await github.rest.issues.createComment({
