@@ -94,41 +94,43 @@ helm upgrade --install ml-service ./charts \
 - Comment `/deploy openshift` or `/deploy oc` on a PR to deploy that PR's code to OpenShift
 - The deployment creates an OpenShift Route for external access
 
-#### PR Comment-Based Deployment (For Testing Before Merge)
+#### Comment-Based Deployment (Choose Deployment Target)
 
-**Use this to test your PR changes BEFORE merging to main.**
+**NEW WORKFLOW**: After merging to main, comment on the merged PR to choose where to deploy.
 
-You can deploy directly from pull requests by adding a comment:
+You can deploy by adding a comment to any PR (open or merged):
 
 - **Deploy to AKS**: Comment `/deploy aks` on the PR
 - **Deploy to OpenShift**: Comment `/deploy openshift` or `/deploy oc` on the PR
 
 **When to use:**
+- ✅ **After merging to main**: Comment on the merged PR to deploy to production
 - ✅ **Before merging**: Test your changes in a live environment
-- ✅ **During PR review**: Let reviewers test the actual deployment
-- ❌ **After merging**: Not needed - main branch auto-deploys to AKS
+- ✅ **Choose your platform**: Deploy to AKS or OpenShift based on your needs
 
 **Requirements:**
 - You must have write access to the repository
 - Required secrets must be configured (see Configuration section below)
-- The PR must be **open** (not merged or closed)
 - Comment must be exactly `/deploy aks` or `/deploy openshift` (no extra text)
 
 **The workflow will:**
 1. Detect the deployment target from your comment
-2. Build and push the Docker image with the PR's SHA
-3. Deploy to the specified platform
-4. Comment back with deployment status and details
+2. For merged PRs: Use the merge commit SHA
+3. For open PRs: Use the PR's head SHA
+4. Deploy to the specified platform
+5. Comment back with deployment status and details
 
 **Example workflow:**
 ```
 1. Create PR with your changes
-2. Comment: /deploy aks
-3. Wait for deployment (2-5 minutes)
-4. Test your changes using the deployed service
-5. If everything works, merge the PR
-6. Main branch auto-deploys to production AKS
+2. (Optional) Comment: /deploy aks to test before merge
+3. Merge the PR to main
+4. Comment on the merged PR: /deploy aks or /deploy openshift
+5. Wait for deployment (2-5 minutes)
+6. Your changes are now deployed!
 ```
+
+**Key Change**: Merging to main no longer automatically deploys. You must comment to choose the deployment target.
 
 See [DEPLOYMENT_WORKFLOW.md](docs/DEPLOYMENT_WORKFLOW.md) for detailed examples and troubleshooting.
 

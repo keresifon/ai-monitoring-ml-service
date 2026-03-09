@@ -19,7 +19,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # Detect deployment target from PR comment
+  # Detect deployment target from PR comment (works on open or closed/merged PRs)
   detect-deployment-target:
     runs-on: ubuntu-latest
     if: github.event_name == 'issue_comment' && github.event.issue.pull_request && startsWith(github.event.comment.body, '/deploy')
@@ -51,8 +51,16 @@ jobs:
               repo: context.repo.repo,
               pull_number: context.issue.number
             });
-            core.setOutput('ref', pr.data.head.ref);
-            core.setOutput('sha', pr.data.head.sha);
+            
+            // For merged PRs, use merge commit SHA; for open PRs, use head SHA
+            const sha = pr.data.merged ? pr.data.merge_commit_sha : pr.data.head.sha;
+            const ref = pr.data.merged ? pr.data.base.ref : pr.data.head.ref;
+            
+            core.setOutput('ref', ref);
+            core.setOutput('sha', sha);
+            core.setOutput('merged', pr.data.merged);
+            
+            console.log(`PR #${context.issue.number} - Merged: ${pr.data.merged}, SHA: ${sha}, Ref: ${ref}`);
 
       - name: Parse deployment target
         id: parse
@@ -316,86 +324,9 @@ jobs:
           sarif_file: 'trivy-results.sarif'
           category: 'trivy-container'
 
-  # Deploys to AKS on main branch push (uses values.yaml tag)
-  deploy-aks:
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout code
-        # Using full commit SHA for security (S7637) - v4 tag
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Set up Helm
-        # Using full commit SHA for security (S7637) - v3 tag
-        uses: azure/setup-helm@5119fcb9089d432beecbf79bb2c7915207344b78
-        with:
-          version: v3.13.0
-
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v4
-        with:
-          version: 'v1.28.0'
-
-      - name: Get AKS credentials
-        run: |
-          az aks get-credentials \
-            --resource-group ${{ secrets.AKS_RESOURCE_GROUP }} \
-            --name ${{ secrets.AKS_CLUSTER_NAME }} \
-            --overwrite-existing
-
-      - name: Create namespace if not exists
-        run: |
-          kubectl create namespace ai-monitoring --dry-run=client -o yaml | kubectl apply -f -
-
-      - name: Clear stuck Helm release (if any)
-        run: |
-          # Resolve "another operation is in progress" from interrupted previous deploy
-          if helm list -n ai-monitoring 2>/dev/null | grep -q ml-service; then
-            echo "Clearing any pending Helm operation..."
-            helm rollback ml-service -n ai-monitoring 2>/dev/null || true
-            sleep 5
-          fi
-
-      - name: Deploy with Helm
-        run: |
-          # Skip --wait so we don't block if pods crash (e.g. before fixes); manifests still apply
-          helm upgrade --install ml-service ./charts \
-            --namespace ai-monitoring \
-            --create-namespace \
-            -f charts/values.yaml
-
-      - name: Verify deployment
-        run: |
-          echo "Checking deployment status..."
-          kubectl rollout status deployment/ml-service -n ai-monitoring --timeout=2m
-          echo ""
-          echo "Pods:"
-          kubectl get pods -n ai-monitoring -l app.kubernetes.io/name=ml-service -o wide
-          echo ""
-          echo "Services:"
-          kubectl get svc -n ai-monitoring -l app.kubernetes.io/name=ml-service
-          echo ""
-          echo "HPA:"
-          kubectl get hpa -n ai-monitoring
-
-      - name: Debug pod (on failure)
-        if: failure()
-        run: |
-          echo "=== Pod status ==="
-          kubectl get pods -n ai-monitoring -l app.kubernetes.io/name=ml-service -o wide
-          echo ""
-          echo "=== Pod description ==="
-          kubectl describe pods -n ai-monitoring -l app.kubernetes.io/name=ml-service
-          echo ""
-          echo "=== Pod logs (if any) ==="
-          kubectl logs -n ai-monitoring -l app.kubernetes.io/name=ml-service --tail=100 --all-containers=true 2>/dev/null || true
+  # REMOVED: Automatic deployment on main branch push
+  # Now deployments are triggered by PR comments only
+  # Comment /deploy aks or /deploy openshift on a merged PR to deploy
 
   helm-lint:
     runs-on: ubuntu-latest
@@ -413,10 +344,10 @@ jobs:
       - name: Lint Helm chart
         run: helm lint charts/
 
-  # Deploy to OpenShift via PR comment
+  # Deploy to OpenShift via PR comment (works on open or merged PRs)
   deploy-openshift:
     needs: [detect-deployment-target]
-    runs-on: oc_run
+    runs-on: ubuntu-latest
     if: needs.detect-deployment-target.outputs.target == 'openshift'
     permissions:
       contents: read
