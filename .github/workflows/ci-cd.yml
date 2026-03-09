@@ -95,10 +95,10 @@ jobs:
               content: 'rocket'
             });
 
-  # Runs on develop and PRs only (NOT on main or tags)
+  # Runs on develop and PRs only (NOT on main or tags or issue comments)
   build-and-test:
     runs-on: ubuntu-latest
-    if: "!startsWith(github.ref, 'refs/tags/') && github.ref != 'refs/heads/main'"
+    if: "!startsWith(github.ref, 'refs/tags/') && github.ref != 'refs/heads/main' && github.event_name != 'issue_comment'"
     steps:
       - name: Checkout code
         # Using full commit SHA for security (S7637) - v4 tag
@@ -153,7 +153,7 @@ jobs:
   # CodeQL SAST - runs in parallel with build-and-test
   sast-codeql:
     runs-on: ubuntu-latest
-    if: "!startsWith(github.ref, 'refs/tags/') && github.ref != 'refs/heads/main'"
+    if: "!startsWith(github.ref, 'refs/tags/') && github.ref != 'refs/heads/main' && github.event_name != 'issue_comment'"
     permissions:
       security-events: write
       actions: read
@@ -186,7 +186,7 @@ jobs:
   # Builds Docker image on develop (with sha) or version tags (with semver)
   docker-build:
     needs: [build-and-test]
-    if: always() && (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v')) && github.event_name == 'push' && (needs.build-and-test.result == 'success' || needs.build-and-test.result == 'skipped')
+    if: always() && (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v')) && github.event_name == 'push' && github.event_name != 'issue_comment' && (needs.build-and-test.result == 'success' || needs.build-and-test.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -281,7 +281,7 @@ jobs:
   # Trivy container image scanning
   image-scan:
     needs: [docker-build]
-    if: always() && (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v')) && github.event_name == 'push' && needs.docker-build.result == 'success'
+    if: always() && (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v')) && github.event_name == 'push' && github.event_name != 'issue_comment' && needs.docker-build.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       security-events: write
@@ -340,6 +340,7 @@ jobs:
 
   helm-lint:
     runs-on: ubuntu-latest
+    if: github.event_name != 'issue_comment'
     steps:
       - name: Checkout code
         # Using full commit SHA for security (S7637) - v4 tag
@@ -357,7 +358,7 @@ jobs:
   # Deploy to OpenShift via PR comment (works on open or merged PRs)
   deploy-openshift:
     needs: [detect-deployment-target]
-    runs-on: ubuntu-latest
+    runs-on: oc-run 
     if: needs.detect-deployment-target.outputs.target == 'openshift'
     permissions:
       contents: read
