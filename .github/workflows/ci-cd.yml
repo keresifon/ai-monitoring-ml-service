@@ -390,6 +390,7 @@ jobs:
           helm upgrade --install ml-service ./charts \
             --namespace ${{ secrets.OPENSHIFT_PROJECT }} \
             -f charts/values.yaml \
+            --set openshift.enabled=true \
             --wait \
             --timeout 5m
 
