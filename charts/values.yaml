@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: ghcr.io/kere-sifon/ai-monitoring-ml-service
   pullPolicy: IfNotPresent
-  tag: "1.0.4"
+  tag: "1.0.5"
 
 imagePullSecrets: []
 nameOverride: ""
